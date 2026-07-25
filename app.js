@@ -1,324 +1,169 @@
-import {
-    db, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, onSnapshot, serverTimestamp
-} from "./firebase.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getDatabase, ref, set, get, update, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-import { preguntasDefault } from "./preguntas.js";
+// Configuración de Firebase provista
+const firebaseConfig = {
+  apiKey: "AIzaSyDBqRMHBqMGZyjfbYV_eVp1eYVjLgs0EXU",
+  authDomain: "amigosdemrd.firebaseapp.com",
+  databaseURL: "https://amigosdemrd-default-rtdb.firebaseio.com",
+  projectId: "amigosdemrd",
+  storageBucket: "amigosdemrd.firebasestorage.app",
+  messagingSenderId: "270375257685",
+  appId: "1:270375257685:web:aed1bd61fea3b0dc9676dc",
+  measurementId: "G-M2KCFTMLL3"
+};
 
-// ------------------------
-// VARIABLES GLOBALES
-// ------------------------
-let salaID = "";
-let jugadorID = "";
-let nick = "";
-let soyAdmin = false;
-let ronda = 0;
-const TOTAL_JUGADORES = 7; // Cámbialo si quieres probar con menos
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-// ------------------------
-// ELEMENTOS DEL DOM
-// ------------------------
-const screens = document.querySelectorAll(".screen");
-const btnCrear = document.getElementById("crearSala");
-const btnUnirse = document.getElementById("unirseSala");
-const btnStart = document.getElementById("startGame");
-const btnEnviar = document.getElementById("enviar");
-const btnNext = document.getElementById("nextRound");
-const inputNick = document.getElementById("nickname");
-const inputCodigo = document.getElementById("codigoSala");
-const listaJugadores = document.getElementById("listaJugadores");
-const codigoMostrado = document.getElementById("codigoMostrado");
-const pregunta = document.getElementById("pregunta");
-const respuesta = document.getElementById("respuesta");
-const contador = document.getElementById("contador");
-const rondaHTML = document.getElementById("ronda");
-const listaRespuestas = document.getElementById("listaRespuestas");
+// Estado local
+let myNick = "";
 
-// ------------------------
-// UTILIDADES
-// ------------------------
-function cambiarPantalla(id) {
-    screens.forEach(s => s.classList.remove("active"));
-    document.getElementById(id).classList.add("active");
+// Referencias a las pantallas
+const screenLogin = document.getElementById('screen-login');
+const screenLobby = document.getElementById('screen-lobby');
+const screenVoting = document.getElementById('screen-voting');
+const screenResults = document.getElementById('screen-results');
+
+function showScreen(screen) {
+    screenLogin.classList.add('hidden');
+    screenLobby.classList.add('hidden');
+    screenVoting.classList.add('hidden');
+    screenResults.classList.add('hidden');
+    screen.classList.remove('hidden');
 }
 
-function generarCodigo() {
-    const letras = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let codigo = "";
-    for (let i = 0; i < 6; i++) {
-        codigo += letras[Math.floor(Math.random() * letras.length)];
+// 1. Unirse a la sala
+document.getElementById('btn-join').addEventListener('click', async () => {
+    const input = document.getElementById('nickname-input').value.trim();
+    if (input === "") {
+        alert("¡Ponete un nick!");
+        return;
     }
-    return codigo;
-}
+    myNick = input;
 
-// ARREGLO PARA MÓVILES: Reemplazo seguro de crypto.randomUUID()
-function generarIDSeguro() {
-    return Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
-}
+    const playerRef = ref(db, 'players/' + myNick);
+    const snapshot = await get(playerRef);
 
-// ------------------------
-// EVENT LISTENERS
-// ------------------------
-btnCrear.addEventListener("click", crearSala);
-btnUnirse.addEventListener("click", unirseSala);
-btnStart.addEventListener("click", comenzarJuego);
-btnEnviar.addEventListener("click", enviarRespuesta);
-btnNext.addEventListener("click", siguienteRonda);
-document.getElementById("volver").addEventListener("click", () => location.reload());
-
-// ------------------------
-// FUNCIONES PRINCIPALES
-// ------------------------
-async function crearSala() {
-    nick = inputNick.value.trim();
-    if (nick === "") {
-        alert("¡Poné un nick primero!");
+    if (snapshot.exists()) {
+        alert("Ese nick ya está en uso en esta sala. Elige otro.");
         return;
     }
 
-    btnCrear.innerText = "Creando...";
-    btnCrear.disabled = true;
+    // Registrar jugador en la base de datos
+    await set(playerRef, { joined: true });
 
-    try {
-        salaID = generarCodigo();
-        soyAdmin = true;
-        jugadorID = generarIDSeguro(); // Usamos la función segura
+    // Escuchar cambios generales del juego en tiempo real
+    initGameListeners();
+    showScreen(screenLobby);
+});
 
-        // Guardar la sala en Firebase
-        await setDoc(doc(db, "salas", salaID), {
-            estado: "esperando",
-            ronda: 0,
-            preguntas: preguntasDefault,
-            creada: serverTimestamp()
-        });
-
-        // Guardar al creador como jugador
-        await setDoc(doc(db, "salas", salaID, "jugadores", jugadorID), {
-            nick: nick,
-            admin: true,
-            respondio: false
-        });
-
-        codigoMostrado.innerText = salaID;
-        cambiarPantalla("waiting");
-        escucharJugadores();
-        escucharSala(); // IMPORTANTE: El admin también debe escuchar si cambia de estado
-    } catch (error) {
-        console.error("Error al crear sala:", error);
-        alert("Error al conectar con la base de datos: " + error.message);
-        btnCrear.innerText = "Crear Sala";
-        btnCrear.disabled = false;
-    }
-}
-
-async function unirseSala() {
-    nick = inputNick.value.trim();
-    salaID = inputCodigo.value.trim().toUpperCase();
-
-    if (nick === "") {
-        alert("Ingresá un nick");
-        return;
-    }
-    if (salaID === "") {
-        alert("Ingresá el código de la sala");
-        return;
-    }
-
-    btnUnirse.innerText = "Buscando...";
-    btnUnirse.disabled = true;
-
-    try {
-        const salaRef = doc(db, "salas", salaID);
-        const salaSnap = await getDoc(salaRef);
-
-        if (!salaSnap.exists()) {
-            alert("Esa sala no existe o el código está mal.");
-            btnUnirse.innerText = "Unirse";
-            btnUnirse.disabled = false;
-            return;
-        }
-
-        jugadorID = generarIDSeguro(); // Usamos la función segura
-
-        await setDoc(doc(db, "salas", salaID, "jugadores", jugadorID), {
-            nick: nick,
-            admin: false,
-            respondio: false
-        });
-
-        codigoMostrado.innerText = salaID;
-        btnStart.style.display = "none"; // Solo el admin ve el botón
-        cambiarPantalla("waiting");
-        escucharJugadores();
-        escucharSala();
-    } catch (error) {
-        console.error("Error al unirse:", error);
-        alert("Ocurrió un error al unirse: " + error.message);
-        btnUnirse.innerText = "Unirse";
-        btnUnirse.disabled = false;
-    }
-}
-
-function escucharJugadores() {
-    onSnapshot(collection(db, "salas", salaID, "jugadores"), (snapshot) => {
-        listaJugadores.innerHTML = "";
-        let cantidad = 0;
-
-        snapshot.forEach(docu => {
-            cantidad++;
-            const data = docu.data();
-            const div = document.createElement("div");
-            div.className = "player";
-            if (data.admin) div.classList.add("admin");
-            div.innerHTML = `<span>${data.nick}</span>`;
-            listaJugadores.appendChild(div);
-        });
-
-        // Activamos el botón de iniciar solo al admin si hay suficientes
-        if (soyAdmin) {
-            if (cantidad >= TOTAL_JUGADORES) {
-                btnStart.disabled = false;
-                btnStart.innerText = "Comenzar";
-            } else {
-                btnStart.disabled = true;
-                btnStart.innerText = `Esperando (${cantidad}/${TOTAL_JUGADORES})`;
-            }
-        }
-    });
-}
-
-function escucharSala() {
-    onSnapshot(doc(db, "salas", salaID), (snap) => {
-        if (!snap.exists()) return;
-        const sala = snap.data();
-        ronda = sala.ronda || 0;
-
-        if (sala.estado === "jugando") mostrarRonda(sala);
-        if (sala.estado === "resultados") mostrarResultados();
-        if (sala.estado === "finalizado") cambiarPantalla("final");
-    });
-}
-
-async function comenzarJuego() {
-    btnStart.disabled = true;
-    try {
-        await updateDoc(doc(db, "salas", salaID), {
-            estado: "jugando",
-            ronda: 1
-        });
-    } catch (error) {
-        console.error("Error al iniciar juego:", error);
-        alert("Error al iniciar el juego");
-        btnStart.disabled = false;
-    }
-}
-
-function mostrarRonda(sala) {
-    cambiarPantalla("game");
-    rondaHTML.innerText = "Ronda " + sala.ronda;
-    pregunta.innerText = sala.preguntas[sala.ronda - 1] || "¿Pregunta no encontrada?";
-    respuesta.value = "";
-    btnEnviar.disabled = false;
-    document.getElementById("esperando").innerText = "";
-    escucharCantidadRespuestas();
-}
-
-async function enviarRespuesta() {
-    const texto = respuesta.value.trim();
-    if (texto === "") {
-        alert("¡Escribí una respuesta primero!");
-        return;
-    }
-
-    btnEnviar.disabled = true;
-    document.getElementById("esperando").innerText = "Enviando...";
-
-    try {
-        await setDoc(doc(db, "salas", salaID, "rondas", String(ronda), "respuestas", jugadorID), {
-            nick: nick,
-            texto: texto,
-            fecha: serverTimestamp()
-        });
-
-        await updateDoc(doc(db, "salas", salaID, "jugadores", jugadorID), {
-            respondio: true
-        });
-
-        document.getElementById("esperando").innerText = "¡Respuesta enviada! Esperando al resto...";
-    } catch (error) {
-        console.error("Error al enviar respuesta:", error);
-        alert("Hubo un error, intentá de nuevo.");
-        btnEnviar.disabled = false;
-        document.getElementById("esperando").innerText = "";
-    }
-}
-
-function escucharCantidadRespuestas() {
-    onSnapshot(collection(db, "salas", salaID, "rondas", String(ronda), "respuestas"), async (snapshot) => {
-        contador.innerText = snapshot.size + "/" + TOTAL_JUGADORES;
-
-        // Si todos respondieron y soy el admin, pasamos a resultados
-        if (snapshot.size >= TOTAL_JUGADORES && soyAdmin) {
-            try {
-                await updateDoc(doc(db, "salas", salaID), { estado: "resultados" });
-            } catch (error) {
-                console.error("Error al pasar a resultados:", error);
-            }
-        }
-    });
-}
-
-function mostrarResultados() {
-    cambiarPantalla("results");
-    listaRespuestas.innerHTML = "Cargando respuestas...";
-    btnNext.style.display = soyAdmin ? "block" : "none";
-
-    onSnapshot(collection(db, "salas", salaID, "rondas", String(ronda), "respuestas"), (snapshot) => {
-        listaRespuestas.innerHTML = "";
-        let respuestas = [];
-
-        snapshot.forEach((docu) => respuestas.push(docu.data()));
+// 2. Escuchar cambios globales (Jugadores, Estado del juego y Votos)
+function initGameListeners() {
+    // Sincronizar lista de jugadores
+    onValue(ref(db, 'players'), (snapshot) => {
+        const data = snapshot.val() || {};
+        const players = Object.keys(data);
         
-        // Mezclar respuestas (shuffle)
-        respuestas.sort(() => Math.random() - 0.5);
-
-        respuestas.forEach((r) => {
-            const div = document.createElement("div");
-            div.className = "respuesta";
-            div.innerHTML = `<div class="badge">Anónimo</div> ${r.texto}`;
-            listaRespuestas.appendChild(div);
+        document.getElementById('player-count').innerText = players.length;
+        const list = document.getElementById('player-list');
+        list.innerHTML = "";
+        players.forEach(p => {
+            const li = document.createElement('li');
+            li.innerText = p;
+            list.appendChild(li);
         });
+    });
+
+    // Sincronizar estado de las pantallas (Lobby -> Votación -> Resultados)
+    onValue(ref(db, 'gameState'), (snapshot) => {
+        const state = snapshot.val();
+        if (!state) return;
+
+        if (state.status === 'lobby') {
+            showScreen(screenLobby);
+        } else if (state.status === 'voting') {
+            setupVotingScreen();
+            showScreen(screenVoting);
+        } else if (state.status === 'results') {
+            showResultsScreen(state.votes || {});
+            showScreen(screenResults);
+        }
     });
 }
 
-async function siguienteRonda() {
-    btnNext.disabled = true;
-    try {
-        const salaSnap = await getDoc(doc(db, "salas", salaID));
-        const sala = salaSnap.data();
-        const totalPreguntas = sala.preguntas.length;
+// 3. Admin / Iniciar Ronda
+document.getElementById('btn-start-round').addEventListener('click', async () => {
+    // Cambiar estado global a votación
+    await set(ref(db, 'gameState'), { status: 'voting' });
+    await set(ref(db, 'votes'), {}); // Limpiar votos anteriores
+});
 
-        if (ronda >= totalPreguntas || ronda >= 10) { // Límite de 10 rondas o lo que quieras
-            await updateDoc(doc(db, "salas", salaID), { estado: "finalizado" });
-            return;
-        }
+// 4. Configurar pantalla de votación con los jugadores actuales
+async function setupVotingScreen() {
+    const snapshot = await get(ref(db, 'players'));
+    const players = Object.keys(snapshot.val() || {});
+    
+    const optionsContainer = document.getElementById('voting-options');
+    optionsContainer.innerHTML = "";
+    document.getElementById('vote-status').classList.add('hidden');
+    optionsContainer.classList.remove('hidden');
 
-        // Reiniciamos el estado 'respondio' de los jugadores
-        const jugadores = await getDocs(collection(db, "salas", salaID, "jugadores"));
-        const promesas = jugadores.docs.map(jugador => 
-            updateDoc(doc(db, "salas", salaID, "jugadores", jugador.id), { respondio: false })
-        );
-        await Promise.all(promesas);
-
-        // Avanzamos de ronda
-        await updateDoc(doc(db, "salas", salaID), {
-            ronda: ronda + 1,
-            estado: "jugando"
-        });
-        
-        btnNext.disabled = false;
-    } catch (error) {
-        console.error("Error al pasar de ronda:", error);
-        alert("Error al intentar pasar de ronda.");
-        btnNext.disabled = false;
-    }
+    players.forEach(p => {
+        const btn = document.createElement('button');
+        btn.innerText = `Votar por ${p}`;
+        btn.onclick = () => castVote(p);
+        optionsContainer.appendChild(btn);
+    });
 }
+
+// 5. Emitir Voto (Anónimo: sumamos al contador del jugador votado)
+async function castVote(votedPlayer) {
+    document.getElementById('voting-options').classList.add('hidden');
+    document.getElementById('vote-status').classList.remove('hidden');
+
+    const voteRef = ref(db, `votes/${votedPlayer}`);
+    const snapshot = await get(voteRef);
+    const currentVotes = snapshot.exists() ? snapshot.val() : 0;
+
+    await set(voteRef, currentVotes + 1);
+
+    // Verificar si todos ya votaron o simplemente pasar a resultados tras un breve lapso
+    // Para simplificar entre 7 amigos, pasamos a resultados tras el voto de cualquiera o un timer compartido
+    setTimeout(async () => {
+        // El primero que ejecute esto cambia el estado global a resultados
+        const stateSnap = await get(ref(db, 'gameState/status'));
+        if (stateSnap.val() === 'voting') {
+            const allVotesSnap = await get(ref(db, 'votes'));
+            await set(ref(db, 'gameState'), { 
+                status: 'results', 
+                votes: allVotesSnap.val() || {} 
+            });
+        }
+    }, 1500);
+}
+
+// 6. Mostrar Resultados
+function showResultsScreen(votesData) {
+    const resultsContainer = document.getElementById('results-list');
+    resultsContainer.innerHTML = "";
+
+    const sortedResults = Object.entries(votesData).sort((a, b) => b[1] - a[1]);
+
+    sortedResults.forEach(([nombre, cantidad], index) => {
+        const p = document.createElement('p');
+        if (index === 0) {
+            p.innerHTML = `<strong>🏆 ${nombre}: ${cantidad} votos</strong> (¡El más amigo de mierda!)`;
+            p.style.color = "#ff4757";
+        } else {
+            p.innerText = `${nombre}: ${cantidad} votos`;
+        }
+        resultsContainer.appendChild(p);
+    });
+}
+
+// 7. Siguiente Ronda
+document.getElementById('btn-next-round').addEventListener('click', async () => {
+    await set(ref(db, 'gameState'), { status: 'lobby' });
+});
