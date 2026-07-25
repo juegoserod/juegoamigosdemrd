@@ -18,17 +18,17 @@ import {
 
 const firebaseConfig = {
 
-    apiKey: "TU_API_KEY",
+    apiKey: "AIzaSyDBqRMHBqMGZyjfbYV_eVp1eYVjLgs0EXU",
 
-    authDomain: "TU_PROYECTO.firebaseapp.com",
+    authDomain: "amigosdemrd.firebaseapp.com",
 
-    projectId: "TU_PROYECTO",
+    projectId: "amigosdemrd",
 
-    storageBucket: "TU_PROYECTO.firebasestorage.app",
+    storageBucket: "amigosdemrd.firebasestorage.app",
 
-    messagingSenderId: "000000000000",
+    messagingSenderId: "270375257685",
 
-    appId: "1:000000000000:web:XXXXXXXX"
+    appId: "1:270375257685:web:227717ba7f88bcd19676dc"
 
 };
 
