@@ -1,182 +1,69 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Amigo de Mierda</title>
-
+    
     <link rel="stylesheet" href="style.css">
-
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-
 </head>
 <body>
 
 <div id="app">
 
-    <!-- INICIO -->
     <section id="home" class="screen active">
-
         <h1>💀 Amigo de Mierda</h1>
-
-        <p class="subtitle">
-            Respondé anónimamente...
-        </p>
-
-        <input
-            id="nickname"
-            type="text"
-            maxlength="20"
-            placeholder="Tu nick">
-
-        <button id="crearSala">
-            Crear Sala
-        </button>
-
-        <div class="divider">
-            o
-        </div>
-
-        <input
-            id="codigoSala"
-            maxlength="6"
-            placeholder="Código de sala">
-
-        <button id="unirseSala">
-            Unirse
-        </button>
-
+        <p class="subtitle">Respondé anónimamente...</p>
+        
+        <input id="nickname" type="text" maxlength="20" placeholder="Tu nick">
+        <button id="crearSala">Crear Sala</button>
+        
+        <div class="divider">o</div>
+        
+        <input id="codigoSala" type="text" maxlength="6" placeholder="Código de sala" style="text-transform: uppercase;">
+        <button id="unirseSala">Unirse</button>
     </section>
-
-
-
-
-
-    <!-- ESPERA -->
 
     <section id="waiting" class="screen">
-
         <h2>Sala</h2>
-
-        <h1 id="codigoMostrado">
-            ------
-        </h1>
-
-        <p>
-            Compartí este código con tus amigos
-        </p>
-
-        <div id="listaJugadores">
-
-        </div>
-
-        <button id="startGame">
-            Comenzar
-        </button>
-
+        <h1 id="codigoMostrado">------</h1>
+        <p>Compartí este código con tus amigos</p>
+        
+        <div id="listaJugadores"></div>
+        
+        <button id="startGame" disabled>Comenzar</button>
     </section>
-
-
-
-
-
-    <!-- RONDA -->
 
     <section id="game" class="screen">
-
         <div class="top">
-
-            <span id="ronda">
-                Ronda 1
-            </span>
-
-            <span id="contador">
-                0/7
-            </span>
-
+            <span id="ronda">Ronda 1</span>
+            <span id="contador">0/7</span>
         </div>
-
-        <div id="pregunta" class="question">
-
-            Cargando...
-
-        </div>
-
-        <textarea
-            id="respuesta"
-            maxlength="250"
-            placeholder="Escribí tu respuesta...">
-        </textarea>
-
-        <button id="enviar">
-
-            Enviar
-
-        </button>
-
-        <p id="esperando">
-
-        </p>
-
+        
+        <div id="pregunta" class="question">Cargando...</div>
+        
+        <textarea id="respuesta" maxlength="250" placeholder="Escribí tu respuesta..."></textarea>
+        <button id="enviar">Enviar</button>
+        <p id="esperando"></p>
     </section>
-
-
-
-
-
-    <!-- RESULTADOS -->
 
     <section id="results" class="screen">
-
-        <h2>
-
-            Respuestas
-
-        </h2>
-
-        <div id="listaRespuestas">
-
-        </div>
-
-        <button id="nextRound">
-
-            Siguiente ronda
-
-        </button>
-
+        <h2>Respuestas</h2>
+        <div id="listaRespuestas"></div>
+        <button id="nextRound">Siguiente ronda</button>
     </section>
 
-
-
-
-
-    <!-- FINAL -->
-
     <section id="final" class="screen">
-
-        <h1>
-
-            Fin de la partida 🎉
-
-        </h1>
-
-        <button id="volver">
-
-            Volver al inicio
-
-        </button>
-
+        <h1>Fin de la partida 🎉</h1>
+        <button id="volver">Volver al inicio</button>
     </section>
 
 </div>
 
-<script type="module" src="firebase.js"></script>
-<script type="module" src="preguntas.js"></script>
 <script type="module" src="app.js"></script>
 
 </body>
